@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+outputs/checkpoints/*.h5
+outputs/plots/*.png
+outputs/plots/*.gif
+outputs/plots/*.wav
+data/raw/*.zip
+!.gitkeep
+# Processed dataset arrays
+data/processed/*.npy
+.vscode/
