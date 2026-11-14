@@ -2,12 +2,26 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+
+# Model checkpoints
 outputs/checkpoints/*.h5
+
+# Generated outputs
 outputs/plots/*.png
 outputs/plots/*.gif
 outputs/plots/*.wav
+
+# Raw data archives
 data/raw/*.zip
-!.gitkeep
+data/raw/custom_samples_archive/
+
 # Processed dataset arrays
 data/processed/*.npy
+
+# Backups
+outputs/backups/
+
+# VS Code
 .vscode/
+
+!.gitkeep

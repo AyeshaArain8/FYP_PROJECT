@@ -26,11 +26,19 @@ and demo it.
 
 ## Setup
 
+Use Python 3.10. If this project already has a working `.venv`, activate that
+environment and keep using it; there is no need to recreate it. MediaPipe is
+pinned to the version used by this project because newer releases removed the
+`solutions.hands` API used by the live extractor.
+
 ```bash
-python -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
+py -3.10 -m venv .venv          # only for a fresh setup
+.venv\Scripts\Activate.ps1     # Windows PowerShell
+source .venv/bin/activate       # macOS/Linux
 pip install -r requirements.txt
 ```
+
+For a project that already runs, do not run the environment creation command.
 
 ## Project structure
 
@@ -58,7 +66,7 @@ PSL_Communication_System/
     ├── evaluate.py               # <-- RUN THIS after training, to see accuracy/confusion matrix
     ├── build_templates.py       # already run once; re-run only if you re-preprocess
     ├── predict_live.py          # webcam demo, single sign at a time
-    ├── inference_continuous.py  # sliding-window continuous sentence decoding
+    ├── inference_continuous.py  # classify hand-detected sign segments in videos
     ├── gloss_to_english.py      # rule-based gloss -> English sentence cleanup
     ├── tts.py                   # text-to-speech (pyttsx3, offline)
     ├── text_to_sign.py          # Text -> Sign, renders an animated stick figure
@@ -85,10 +93,13 @@ PSL_Communication_System/
    signs the model actually confuses — important for your thesis results
    section.
 
-3. **Try the live webcam demo (single sign):**
+3. **Try automatic live webcam sign recognition:**
    ```bash
-   python src/predict_live.py
+   python src/predict_live_continuous.py
    ```
+
+   The live camera displays green landmarks and automatically outputs a stable
+   sign as text and speech. `c` clears the sentence; `q` closes the camera.
 
 4. **Try continuous sentence decoding on a recorded video:**
    ```bash
@@ -100,14 +111,33 @@ PSL_Communication_System/
    streamlit run src/app.py
    ```
 
+## Improve an existing sign's camera accuracy
+
+In the app, open **Calibrate an existing PSL sign**, choose a word the model
+misses, and record more examples with the same camera and signer. Green
+landmarks confirm hand detection. Live recognition itself works automatically;
+`c` and `q` are only for clearing the sentence or closing the camera.
+
+After recording calibration samples, run these commands in the active project
+environment:
+
+```powershell
+python src/add_recorded_words.py --minimum 7
+python src/train.py --resume
+python src/build_templates.py
+python src/evaluate.py
+```
+
+This keeps the current vocabulary and fine-tunes the existing classifier.
+Restart Streamlit after training to load the updated checkpoint.
+
 ## Important things to know before you defend this
 
 - **This is isolated-sign training data, not continuous-sentence data.**
   Every sample in the dataset is one gesture performed alone. The
-  "continuous" behavior comes from `inference_continuous.py` running a
-  sliding window over a longer video and stitching together a sequence of
-  independently-recognized signs — not from the model itself understanding
-  sentence structure. Be ready to explain this distinction clearly; it's
+  video behavior comes from `inference_continuous.py` splitting clips at brief
+  hand-detection gaps and classifying each segment — not from the model itself
+  understanding sentence structure. Be ready to explain this distinction; it's
   the honest and correct way to describe what you built.
 
 - **`gloss_to_english.py` is a simple rule-based placeholder**, not a
@@ -121,11 +151,10 @@ PSL_Communication_System/
   trained on, rather than requiring a second, separately-collected video
   asset library).
 
-- **Hand left/right ordering in `landmark_utils.py` is an assumption**
-  (left hand first, right hand second) since the original dataset's exact
-  convention isn't documented. If live predictions look consistently wrong
-  on asymmetric one-handed signs, that ordering is the first thing to check
-  and flip.
+- **Live hand slots follow the processed training data:** one detected hand
+  goes in slot two; with two detected hands, the hand farther right in image
+  coordinates goes in slot one. MediaPipe's left/right label is not used for
+  slot assignment because it can change with camera mirroring.
 
 - **7 classes were automatically dropped** during preprocessing: `test2`,
   `test_word`, `s` (junk/incomplete recordings), and `bird`, `come`,

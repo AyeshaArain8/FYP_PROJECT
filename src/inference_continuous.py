@@ -1,10 +1,7 @@
 """
-Continuous sign recognition: runs a sliding window over a longer video
-(multiple signs performed back-to-back) and decodes it into a sequence of
-glosses. This is what makes the system handle "sentences" rather than just
-one isolated sign at a time -- the underlying model is still a per-sign
-classifier (see model.py); the sentence-level behaviour comes from how we
-call it here, not from the model itself.
+Video sign recognition: splits a clip at short gaps where no hand is detected,
+then classifies each isolated sign segment. The underlying model is still a
+per-sign classifier; it does not understand sentence structure.
 
 USAGE
     python src/inference_continuous.py path/to/video.mp4
@@ -20,6 +17,7 @@ import numpy as np
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import config
 from landmark_utils import HandLandmarkExtractor
+from sequence_utils import prepare_live_sequence
 from model_io import load_trained_model
 
 
@@ -37,31 +35,48 @@ def extract_video_landmarks(video_path: str) -> np.ndarray:
     return np.array(feats)  # (T, 126)
 
 
-def sliding_window_predict(model, classes, feats: np.ndarray,
-                            window: int = config.SEQ_LEN, stride: int = 10,
-                            conf_threshold: float = 0.75) -> list:
+def split_detected_segments(feats: np.ndarray, max_gap: int = 8,
+                            min_active_frames: int = 3) -> list:
+    """Split a clip where hand landmarks disappear between isolated signs."""
     if len(feats) == 0:
         return []
 
+    active = np.any(np.abs(feats) > 1e-8, axis=1)
+    starts = np.where(active & ~np.r_[False, active[:-1]])[0]
+    ends = np.where(active & ~np.r_[active[1:], False])[0]
+    intervals = []
+    for start, end in zip(starts, ends):
+        start, end = int(start), int(end)
+        if intervals and start - intervals[-1][1] - 1 <= max_gap:
+            intervals[-1] = (intervals[-1][0], end)
+        else:
+            intervals.append((start, end))
+
+    segments = []
+    for start, end in intervals:
+        segment = feats[start:end + 1]
+        active_count = int(np.any(np.abs(segment) > 1e-8, axis=1).sum())
+        if active_count >= min_active_frames:
+            segments.append(segment)
+    return segments
+
+
+def sliding_window_predict(model, classes, feats: np.ndarray,
+                            window: int = config.SEQ_LEN, stride: int = 10,
+                            conf_threshold: float = 0.65) -> list:
+    """Classify one isolated sign per detected-hand segment in a video."""
+    del stride  # retained for call compatibility; segments replace overlapping windows
     predictions = []
-    for start in range(0, max(1, len(feats) - window + 1), stride):
-        window_feats = feats[start:start + window]
-        if len(window_feats) < window:
-            pad = np.repeat(window_feats[-1:], window - len(window_feats), axis=0)
-            window_feats = np.concatenate([window_feats, pad], axis=0)
+    for segment in split_detected_segments(feats):
+        prepared = prepare_live_sequence(segment, window)
+        if prepared is None:
+            continue
 
-        probs = model.predict(np.expand_dims(window_feats, 0), verbose=0)[0]
+        probs = model.predict(np.expand_dims(prepared, 0), verbose=0)[0]
         idx = int(probs.argmax())
-        if probs[idx] > conf_threshold:
+        if float(probs[idx]) >= conf_threshold:
             predictions.append(classes[idx])
-
-    # De-duplicate consecutive repeats (the same sign gets picked up by
-    # multiple overlapping windows while it's being held).
-    glosses = []
-    for word in predictions:
-        if not glosses or glosses[-1] != word:
-            glosses.append(word)
-    return glosses
+    return predictions
 
 
 def main(video_path: str):

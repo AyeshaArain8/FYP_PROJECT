@@ -12,6 +12,7 @@ outputs/checkpoints/psl_model.h5 and training curves to outputs/plots/.
 
 import json
 import sys
+import argparse
 from pathlib import Path
 
 import numpy as np
@@ -24,6 +25,14 @@ from model import build_model
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="start from the current checkpoint (for adding camera samples to existing classes)",
+    )
+    args = parser.parse_args()
+
     config.CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
     config.PLOTS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -39,8 +48,14 @@ def main():
     print(f"Training on {len(y_train)} samples, validating on {len(y_val)}, "
           f"{num_classes} classes.")
 
+    learning_rate = config.LEARNING_RATE * (0.1 if args.resume else 1.0)
     model = build_model(num_classes, config.SEQ_LEN, config.FEATURE_DIM,
-                         learning_rate=config.LEARNING_RATE)
+                         learning_rate=learning_rate)
+    if args.resume:
+        if not config.MODEL_PATH.exists():
+            raise FileNotFoundError(f"Cannot resume; checkpoint not found: {config.MODEL_PATH}")
+        model.load_weights(str(config.MODEL_PATH))
+        print(f"Fine-tuning existing checkpoint: {config.MODEL_PATH}")
     model.summary()
 
     callbacks = [
@@ -49,7 +64,8 @@ def main():
             monitor="val_accuracy", mode="max"
         ),
         keras.callbacks.EarlyStopping(
-            monitor="val_accuracy", patience=10, restore_best_weights=True, mode="max"
+            monitor="val_accuracy", patience=5 if args.resume else 10,
+            restore_best_weights=True, mode="max"
         ),
         keras.callbacks.ReduceLROnPlateau(monitor="val_loss", factor=0.5, patience=5),
     ]
@@ -57,7 +73,7 @@ def main():
     history = model.fit(
         X_train, y_train,
         validation_data=(X_val, y_val),
-        epochs=config.EPOCHS,
+        epochs=min(20, config.EPOCHS) if args.resume else config.EPOCHS,
         batch_size=config.BATCH_SIZE,
         callbacks=callbacks,
     )

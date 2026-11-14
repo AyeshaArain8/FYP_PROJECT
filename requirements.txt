@@ -3,7 +3,7 @@ tensorflow
 scikit-learn
 matplotlib
 opencv-python
-mediapipe
+mediapipe==0.10.21
 pyttsx3
 streamlit
 pillow

@@ -17,6 +17,7 @@ import numpy as np
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import config
 from landmark_utils import HandLandmarkExtractor
+from sequence_utils import prepare_live_sequence
 from tts import speak
 from model_io import load_trained_model
 
@@ -38,18 +39,25 @@ def main():
         if not ok:
             break
 
-        feat = extractor.extract(frame)
+        feat, hand_results = extractor.extract_with_raw(frame)
+        hand_detected = extractor.draw_landmarks(frame, hand_results)
         buffer.append(feat)
 
-        cv2.putText(frame, f"buffer: {len(buffer)}/{config.SEQ_LEN}", (10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+        status = "HAND DETECTED" if hand_detected else "NO HAND DETECTED"
+        color = (0, 255, 0) if hand_detected else (0, 0, 255)
+        cv2.putText(frame, f"{status}  buffer: {len(buffer)}/{config.SEQ_LEN}", (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
         cv2.imshow("PSL live capture", frame)
 
         key = cv2.waitKey(1) & 0xFF
         if key == ord("q"):
             break
         if key == ord(" ") and len(buffer) == config.SEQ_LEN:
-            seq = np.expand_dims(np.array(buffer), axis=0)  # (1, seq_len, 126)
+            prepared = prepare_live_sequence(np.asarray(buffer), config.SEQ_LEN)
+            if prepared is None:
+                print("No hand detected in the current window.")
+                continue
+            seq = np.expand_dims(prepared, axis=0)  # (1, seq_len, 126)
             probs = model.predict(seq, verbose=0)[0]
             pred_idx = int(probs.argmax())
             confidence = float(probs[pred_idx])

@@ -1,13 +1,9 @@
-"""
-Extracts a 126-dim landmark vector per frame (2 hands x 21 landmarks x xyz),
-matching the format used in the PakistanSignLanguageDatasetV2 dataset.
+"""Extract dataset-compatible 126-value vectors from live camera frames.
 
-NOTE ON HAND ORDERING: the original dataset's exact left/right ordering
-convention isn't documented in its README. This extractor puts left hand
-first (indices 0-62) and right hand second (indices 63-125), which matches
-the vast majority of MediaPipe-based PSL/ASL projects. If live predictions
-look consistently wrong for asymmetric one-handed signs, try swapping the
-order in `extract()` below -- that's the most likely cause.
+The processed dataset puts almost every one-hand sample in slot two. When
+both hands are present, the first slot usually contains the hand farther right
+in image coordinates. MediaPipe labels are ignored because they can flip when
+camera mirroring changes, and duplicate labels can otherwise overwrite a hand.
 """
 
 import cv2
@@ -27,50 +23,51 @@ class HandLandmarkExtractor:
         )
 
     def extract(self, frame_bgr: np.ndarray) -> np.ndarray:
-        rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-        results = self.hands.process(rgb)
+        vector, _ = self.extract_with_raw(frame_bgr)
+        return vector
 
-        left = np.zeros(63, dtype=np.float32)
-        right = np.zeros(63, dtype=np.float32)
+    @staticmethod
+    def _pack(results) -> np.ndarray:
+        slots = [np.zeros(63, dtype=np.float32), np.zeros(63, dtype=np.float32)]
+        detected = []
+        if results.multi_hand_landmarks:
+            for hand_landmarks in results.multi_hand_landmarks:
+                points = np.asarray(
+                    [[lm.x, lm.y, lm.z] for lm in hand_landmarks.landmark],
+                    dtype=np.float32,
+                )
+                detected.append((float(points[:, 0].mean()), points.flatten()))
 
-        if results.multi_hand_landmarks and results.multi_handedness:
-            for hand_landmarks, handedness in zip(
-                results.multi_hand_landmarks, results.multi_handedness
-            ):
-                coords = np.array(
-                    [[lm.x, lm.y, lm.z] for lm in hand_landmarks.landmark], dtype=np.float32
-                ).flatten()
-                label = handedness.classification[0].label  # "Left" or "Right"
-                if label == "Left":
-                    left = coords
-                else:
-                    right = coords
-
-        return np.concatenate([left, right])  # (126,)
+        if len(detected) == 1:
+            slots[1] = detected[0][1]
+        elif len(detected) >= 2:
+            detected.sort(key=lambda item: item[0], reverse=True)
+            slots[0], slots[1] = detected[0][1], detected[1][1]
+        return np.concatenate(slots)
 
     def extract_with_raw(self, frame_bgr: np.ndarray):
-        """Same as extract(), but also returns MediaPipe's raw results object
-        so the caller can draw the detected skeleton for debugging."""
+        """Return the packed vector and MediaPipe results for drawing."""
         rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
         results = self.hands.process(rgb)
+        return self._pack(results), results
 
-        left = np.zeros(63, dtype=np.float32)
-        right = np.zeros(63, dtype=np.float32)
-
-        if results.multi_hand_landmarks and results.multi_handedness:
-            for hand_landmarks, handedness in zip(
-                results.multi_hand_landmarks, results.multi_handedness
-            ):
-                coords = np.array(
-                    [[lm.x, lm.y, lm.z] for lm in hand_landmarks.landmark], dtype=np.float32
-                ).flatten()
-                label = handedness.classification[0].label
-                if label == "Left":
-                    left = coords
-                else:
-                    right = coords
-
-        return np.concatenate([left, right]), results
+    @staticmethod
+    def draw_landmarks(frame_bgr: np.ndarray, results) -> bool:
+        """Draw green hand landmarks on the camera frame; return hand presence."""
+        if not results.multi_hand_landmarks:
+            return False
+        drawing = mp.solutions.drawing_utils
+        landmark_style = drawing.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=3)
+        connection_style = drawing.DrawingSpec(color=(0, 180, 0), thickness=2)
+        for hand_landmarks in results.multi_hand_landmarks:
+            drawing.draw_landmarks(
+                frame_bgr,
+                hand_landmarks,
+                mp_hands.HAND_CONNECTIONS,
+                landmark_drawing_spec=landmark_style,
+                connection_drawing_spec=connection_style,
+            )
+        return True
 
     def close(self):
         self.hands.close()
