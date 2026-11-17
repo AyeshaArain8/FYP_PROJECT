@@ -14,10 +14,12 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 import speech_recognition as sr
 import streamlit as st
+from streamlit_webrtc import webrtc_streamer
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
@@ -27,6 +29,7 @@ from gloss_to_english import gloss_to_english
 from tts import save_audio
 from text_to_sign import render_sign_sequence
 from model_io import load_trained_model
+from live_webrtc import LiveSignProcessor
 
 
 st.set_page_config(
@@ -410,23 +413,80 @@ with col1:
 
         else:
             st.caption(
-                "Green landmarks show hand detection. Sign normally; stable signs are converted to text and voice automatically."
+                "Allow camera access in your browser, then press START in the camera preview. "
+                "Green landmarks show hand detection."
+            )
+            processor = st.session_state.get("psl_live_processor")
+            if processor is None:
+                processor = LiveSignProcessor(model, classes)
+                st.session_state["psl_live_processor"] = processor
+
+            if st.button("🧹 Clear live sentence", key="clear_live_sentence"):
+                processor.clear()
+
+            rtc = webrtc_streamer(
+                key="psl-live-camera",
+                video_frame_callback=processor.process_frame,
+                rtc_configuration={
+                    "iceServers": [
+                        {"urls": ["stun:stun.l.google.com:19302"]}
+                    ]
+                },
+                media_stream_constraints={"video": True, "audio": False},
             )
 
-            if st.button(
-                "🎥 Start Live Camera",
-                use_container_width=True
-            ):
-                script_path = str(
-                    Path(__file__).resolve().parent
-                    / "predict_live_continuous.py"
+            live_result = st.empty()
+            live_audio = st.empty()
+            if rtc.state.playing:
+                last_spoken_glosses = tuple(processor.snapshot()[0])
+                while rtc.state.playing:
+                    glosses, guess, hand_detected, error = processor.snapshot()
+                    if error:
+                        live_result.error(f"Live recognition stopped: {error}")
+                        break
+
+                    if hand_detected:
+                        live_result.success(
+                            f"**Hand detected** · Last guess: {guess}"
+                        )
+                    else:
+                        live_result.info("Show your hand clearly in the camera view.")
+
+                    if glosses:
+                        english = gloss_to_english(glosses)
+                        live_result.markdown(
+                            f"**Signs:** {', '.join(glosses)}  \n**English:** {english}"
+                        )
+
+                    current_glosses = tuple(glosses)
+                    if current_glosses != last_spoken_glosses and glosses:
+                        english = gloss_to_english(glosses)
+                        try:
+                            config.PLOTS_DIR.mkdir(parents=True, exist_ok=True)
+                            audio_path = config.PLOTS_DIR / "live_speech.wav"
+                            save_audio(english, str(audio_path))
+                            live_audio.audio(
+                                audio_path.read_bytes(),
+                                format="audio/wav",
+                                autoplay=True,
+                            )
+                        except Exception as audio_error:
+                            live_audio.warning(
+                                f"Text is available, but speech could not be generated: {audio_error}"
+                            )
+                        last_spoken_glosses = current_glosses
+
+                    time.sleep(0.2)
+            else:
+                st.info(
+                    "Press START in the camera preview and allow camera permission when your browser asks."
                 )
-                subprocess.Popen(
-                    [sys.executable, script_path]
-                )
-                st.success(
-                    "Live camera window launched — check your taskbar."
-                )
+                glosses, _, _, error = processor.snapshot()
+                if error:
+                    st.error(f"Live recognition error: {error}")
+                elif glosses:
+                    st.success(f"Signs: {', '.join(glosses)}")
+                    st.info(f"English: {gloss_to_english(glosses)}")
 
     with st.expander("🎯 Calibrate an existing PSL sign"):
         st.write("Record camera-specific examples for an existing PSL word that the model confuses.")
