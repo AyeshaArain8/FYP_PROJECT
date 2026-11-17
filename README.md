@@ -111,22 +111,21 @@ PSL_Communication_System/
    streamlit run src/app.py
    ```
 
-## Improve an existing sign's camera accuracy
+## Calibrate an existing word or add a new PSL word
 
-In the app, open **Calibrate an existing PSL sign**, choose a word the model
-misses, and record more examples with the same camera and signer. Green
-landmarks confirm hand detection. Live recognition itself works automatically;
-`c` and `q` are only for clearing the sentence or closing the camera.
+In the app, open **Calibrate an existing PSL sign** to add examples to a word
+already in the model, or **Add a new PSL word** to extend the vocabulary.
+Enter a label such as `good_morning`, then start recording. In the camera
+window, press **R once per example**. After the countdown, perform the full
+sign; the sample saves automatically. The normal live sign-to-text camera does
+not require R. Green landmarks show whether the recording camera sees the hand.
 
-After recording calibration samples, run these commands in the active project
-environment:
-
-```powershell
-python src/add_recorded_words.py --minimum 7
-python src/train.py --resume
-python src/build_templates.py
-python src/evaluate.py
-```
+Record at least 7 examples to calibrate an existing class. A new class needs at
+least 20; 40 varied examples are recommended. After recording, click the
+matching **Add ... & train** button in the app. It integrates the samples,
+fine-tunes or expands the model, rebuilds sign templates, evaluates, and reloads
+the app. A safety snapshot of model and dataset files is created before each
+training run.
 
 This keeps the current vocabulary and fine-tunes the existing classifier.
 Restart Streamlit after training to load the updated checkpoint.

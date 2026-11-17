@@ -10,6 +10,7 @@ USAGE
 """
 
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -57,7 +58,7 @@ div[data-testid="stVerticalBlockBorderWrapper"] {
 """, unsafe_allow_html=True)
 
 st.title("🤟 Pakistan Sign Language — Two-Way Communication")
-st.caption("Sign ↔ Text ↔ Voice, built on a 68-word PSL vocabulary.")
+st.caption("Sign ↔ Text ↔ Voice, with a PSL vocabulary you can extend.")
 
 
 def get_classes_in_model_order(label_map):
@@ -219,6 +220,40 @@ URDU_MEANINGS = {
 
 model, classes = load_model_and_labels()
 
+pipeline_feedback = st.session_state.pop("word_pipeline_feedback", None)
+if pipeline_feedback:
+    st.success(pipeline_feedback["message"])
+    with st.expander("Training and evaluation log"):
+        st.code(pipeline_feedback["log"] or "Completed successfully.")
+
+
+def launch_word_recorder(word, sample_count):
+    recorder = Path(__file__).resolve().parent / "record_word.py"
+    subprocess.Popen(
+        [sys.executable, str(recorder), "--word", word, "--samples", str(int(sample_count))],
+        cwd=str(config.ROOT_DIR),
+    )
+
+
+def process_word_recordings(word, minimum):
+    pipeline = Path(__file__).resolve().parent / "word_pipeline.py"
+    with st.spinner("Adding examples and training the PSL model. This can take several minutes..."):
+        result = subprocess.run(
+            [sys.executable, str(pipeline), "--word", word, "--minimum", str(minimum)],
+            cwd=str(config.ROOT_DIR), text=True, capture_output=True,
+        )
+    output = (result.stdout or "") + (result.stderr or "")
+    if result.returncode:
+        st.error("Training did not finish. If processing had started, the saved model/data snapshot was restored.")
+        st.code(output[-12000:] or f"Exit code: {result.returncode}")
+        return
+    st.session_state["word_pipeline_feedback"] = {
+        "message": f"'{word}' was added and the model/templates were updated.",
+        "log": output[-12000:],
+    }
+    st.cache_resource.clear()
+    st.rerun()
+
 # Display labels map back to the unchanged model class names.
 display_to_class = {
     f"{word} — {URDU_MEANINGS.get(word, 'اردو معنی دستیاب نہیں')}": word
@@ -241,7 +276,7 @@ with col1:
         )
 
         if mode == "📤 Upload Video":
-            st.caption("Video is split at short no-hand gaps; pause briefly between signs when the clip contains multiple signs.")
+            st.caption("Video is split at short no-hand gaps. Low-confidence guesses are skipped to reduce incorrect words.")
             uploaded_video = st.file_uploader(
                 "Upload a video of someone signing",
                 type=["mp4", "avi", "mov"],
@@ -262,11 +297,11 @@ with col1:
                         )
                         english = gloss_to_english(glosses)
 
-                    st.success(
-                        f"**Decoded signs:** "
-                        f"{', '.join(glosses) if glosses else '(none detected)'}"
-                    )
-                    st.info(f"**English:** {english or '—'}")
+                    if glosses:
+                        st.success(f"**Decoded signs:** {', '.join(glosses)}")
+                        st.info(f"**English:** {english or '—'}")
+                    else:
+                        st.warning("No sign passed the confidence check. Try a clearer/longer clip or record more examples for this PSL word.")
 
                     if english:
                         config.PLOTS_DIR.mkdir(
@@ -306,34 +341,55 @@ with col1:
                 )
 
     with st.expander("🎯 Calibrate an existing PSL sign"):
-        st.write("Record more examples for a word the current model misses. New vocabulary can be added later.")
+        st.write("Record camera-specific examples for an existing PSL word that the model confuses.")
         calibration_word = st.selectbox("Choose an existing word", classes)
         sample_count = st.number_input(
-            "Number of samples to record",
-            min_value=7,
-            max_value=200,
-            value=20,
-            step=5,
+            "Number of examples to record", min_value=7, max_value=200,
+            value=20, step=5, key="calibration_sample_count",
         )
+        calibration_dir = config.DATA_RAW_DIR / "custom_samples" / calibration_word
+        calibration_saved = len(list(calibration_dir.glob("sample_*.npy"))) if calibration_dir.exists() else 0
+        st.caption(f"Saved examples waiting to add: {calibration_saved}. Press R once per example; after a 2-second countdown, perform the complete sign. Each capture saves automatically.")
+        record_col, process_col = st.columns(2)
+        with record_col:
+            if st.button("📹 Record examples", key="record_existing_word", use_container_width=True):
+                launch_word_recorder(calibration_word, int(sample_count))
+                st.info("Camera opened. Press R once per example; Q closes the recorder.")
+        with process_col:
+            if st.button("➕ Add examples & fine-tune", key="process_existing_word",
+                         disabled=calibration_saved < 7, use_container_width=True):
+                process_word_recordings(calibration_word, 7)
 
-        if st.button("📹 Record calibration samples"):
-            recorder = Path(__file__).resolve().parent / "record_word.py"
-            subprocess.Popen([
-                sys.executable,
-                str(recorder),
-                "--word", calibration_word,
-                "--samples", str(int(sample_count)),
-            ])
-            st.success("Camera window khul gaya. Green points detection dikhayenge; R se sample start/stop, Q se finish karein.")
-
-        st.caption("Recording ke baad terminal mein yeh commands chalayein. Training complete ho to Streamlit restart karein.")
-        st.code(
-            "python src/add_recorded_words.py\n"
-            "python src/train.py --resume\n"
-            "python src/build_templates.py\n"
-            "python src/evaluate.py",
-            language="powershell",
+    with st.expander("🆕 Add a new PSL word"):
+        st.write("Record examples for a new sign label, add them to the PSL dataset, and train an expanded classifier.")
+        raw_new_word = st.text_input("New word label", placeholder="e.g. good_morning", key="new_psl_word")
+        new_word = re.sub(r"\s+", "_", raw_new_word.strip().lower())
+        valid_new_word = bool(re.fullmatch(r"[a-z0-9]+(?:[_-][a-z0-9]+)*", new_word))
+        word_already_exists = valid_new_word and new_word in classes
+        new_sample_count = st.number_input(
+            "Examples to record (recommended: 40)", min_value=20, max_value=200,
+            value=40, step=5, key="new_word_sample_count",
         )
+        new_sample_dir = config.DATA_RAW_DIR / "custom_samples" / new_word if valid_new_word else None
+        new_saved = len(list(new_sample_dir.glob("sample_*.npy"))) if new_sample_dir and new_sample_dir.exists() else 0
+        st.caption(f"Saved examples waiting to add: {new_saved}. Press R once per example; after a 2-second countdown, perform the complete sign. Each capture saves automatically.")
+        if word_already_exists:
+            st.info("This word is already in the model. Use the existing-word calibration section above.")
+        elif raw_new_word and not valid_new_word:
+            st.error("Use English letters/numbers and underscores, for example: good_morning")
+
+        record_col, process_col = st.columns(2)
+        with record_col:
+            if st.button("📹 Record new-word examples", key="record_new_word",
+                         disabled=not valid_new_word or word_already_exists,
+                         use_container_width=True):
+                launch_word_recorder(new_word, int(new_sample_count))
+                st.info("Camera opened. Press R once per example; Q closes the recorder.")
+        with process_col:
+            if st.button("🧠 Add new word & train model", key="process_new_word",
+                         disabled=not valid_new_word or word_already_exists or new_saved < 20,
+                         use_container_width=True):
+                process_word_recordings(new_word, 20)
 
 
 with col2:
@@ -445,6 +501,7 @@ with col2:
                     st.image(
                         gif_path,
                         caption=" → ".join(words_to_render),
+                        use_container_width=True,
                     )
 
         with st.expander(

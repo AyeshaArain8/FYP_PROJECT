@@ -63,7 +63,7 @@ def split_detected_segments(feats: np.ndarray, max_gap: int = 8,
 
 def sliding_window_predict(model, classes, feats: np.ndarray,
                             window: int = config.SEQ_LEN, stride: int = 10,
-                            conf_threshold: float = 0.65) -> list:
+                            conf_threshold: float = 0.80) -> list:
     """Classify one isolated sign per detected-hand segment in a video."""
     del stride  # retained for call compatibility; segments replace overlapping windows
     predictions = []

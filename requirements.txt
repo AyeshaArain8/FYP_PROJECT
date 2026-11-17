@@ -1,9 +1,12 @@
-numpy
-tensorflow
-scikit-learn
-matplotlib
-opencv-python
+@'
+numpy==1.26.4
+tensorflow==2.17.1
+scikit-learn==1.7.2
+matplotlib==3.10.9
+opencv-python==4.11.0.86
 mediapipe==0.10.21
-pyttsx3
-streamlit
-pillow
+pyttsx3==2.99
+streamlit==1.42.2
+Pillow==11.3.0
+SpeechRecognition==3.17.0
+'@ | Set-Content -Encoding utf8 requirements.txt

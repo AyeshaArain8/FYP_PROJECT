@@ -27,8 +27,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--minimum", type=int, default=7,
                         help="minimum usable recordings for calibration; new classes still require 20")
+    parser.add_argument("--word", help="process only this recorded label (spaces are treated as underscores)")
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
+    target_word = None
+    if args.word:
+        target_word = args.word.strip().lower().replace(" ", "_")
+        if not target_word or any(ch not in "abcdefghijklmnopqrstuvwxyz0123456789_-" for ch in target_word):
+            parser.error("--word may contain letters, numbers, '_' or '-' only")
     sample_root = config.DATA_RAW_DIR / "custom_samples"
     if not sample_root.exists():
         parser.error(f"No recordings found under {sample_root}; run record_word.py first")
@@ -45,7 +51,13 @@ def main():
     updated_words = []
     processed_dirs = []
 
-    for word_dir in sorted(p for p in sample_root.iterdir() if p.is_dir()):
+    word_dirs = sorted(p for p in sample_root.iterdir() if p.is_dir())
+    if target_word:
+        word_dirs = [p for p in word_dirs if p.name.lower() == target_word]
+        if not word_dirs:
+            parser.error(f"No recordings found for '{target_word}' under {sample_root}")
+
+    for word_dir in word_dirs:
         word = word_dir.name.lower()
         is_new_word = word not in classes
         sequences = []
@@ -93,8 +105,8 @@ def main():
         print(f"{action} '{word}': train {len(split_ids['train'])}, val {len(split_ids['val'])}, test {len(split_ids['test'])}.")
 
     if not updated_words:
-        print("No usable new or calibration samples were found.")
-        return
+        print("No usable new or calibration samples were found; no dataset files changed.")
+        raise SystemExit(2)
 
     for name, (X, y) in splits.items():
         np.save(config.DATA_PROCESSED_DIR / f"X_{name}.npy", X)

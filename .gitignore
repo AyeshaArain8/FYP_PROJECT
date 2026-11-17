@@ -25,3 +25,8 @@ outputs/backups/
 .vscode/
 
 !.gitkeep
+# Deployment: include the trained model
+!outputs/checkpoints/psl_model.h5
+
+# Local test videos
+*.mp4
