@@ -68,6 +68,25 @@ h2 {
 [data-testid="stCaptionContainer"] { color: #526476; }
 [data-testid="stHorizontalBlock"] { gap: 1rem; }
 [data-testid="stFileUploaderDropzone"] { border-radius: 14px; }
+[data-testid="stWidgetLabel"] p,
+[data-testid="stRadio"] label,
+[data-testid="stRadio"] label *,
+[data-testid="stSelectbox"] label,
+[data-testid="stSelectbox"] label * {
+    color: #17212B !important;
+    opacity: 1 !important;
+}
+[data-baseweb="select"] > div {
+    background-color: #FFFFFF !important;
+    color: #17212B !important;
+}
+[data-baseweb="select"] *,
+[data-testid="stFileUploaderDropzone"] * {
+    color: #17212B !important;
+}
+[data-testid="stFileUploaderDropzone"] {
+    background-color: #F1F5F9 !important;
+}
 div[data-testid="stVerticalBlockBorderWrapper"] {
     background-color: #FFFFFF;
     border: 1px solid #DCE7EE;
@@ -110,6 +129,9 @@ img, video, canvas { max-width: 100%; }
     .stButton > button { width: 100%; min-height: 48px; }
     [data-testid="stSelectbox"] [role="combobox"],
     [data-testid="stTextInput"] input { min-height: 44px; }
+    [data-testid="stRadio"] label,
+    [data-testid="stRadio"] label * { color: #17212B !important; opacity: 1 !important; }
+    [data-baseweb="select"] > div { background-color: #FFFFFF !important; }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -369,8 +391,16 @@ with col1:
                         audio_path = str(
                             config.PLOTS_DIR / "output_speech.wav"
                         )
-                        save_audio(english, audio_path)
-                        st.audio(audio_path)
+                        try:
+                            save_audio(english, audio_path)
+                            st.audio(audio_path)
+                        except Exception as audio_error:
+                            st.warning(
+                                "Signs and English text were decoded, but speech "
+                                "could not be generated on the server. "
+                                "Please try again after the app finishes rebuilding. "
+                                f"Audio detail: {audio_error}"
+                            )
 
                 except Exception as e:
                     st.error(f"Video processing failed: {e}")
