@@ -41,7 +41,7 @@ st.markdown("""
 [data-testid="stHeader"] { background: rgba(245, 248, 252, 0.92); }
 .block-container {
     max-width: 1280px;
-    padding: 1.4rem clamp(1rem, 3vw, 2.25rem) 3rem;
+    padding: 3.5rem clamp(1rem, 3vw, 2.25rem) 3rem;
 }
 .hero-kicker {
     margin: 0 0 0.2rem 0.15rem;
@@ -88,7 +88,7 @@ div[data-testid="stVerticalBlockBorderWrapper"] {
 [data-testid="stRadio"] div[role="radiogroup"] { gap: 0.5rem; }
 img, video, canvas { max-width: 100%; }
 @media (max-width: 680px) {
-    .block-container { padding: 0.75rem 0.7rem 2rem; }
+    .block-container { padding: 2.5rem 0.7rem 2rem; }
     h1 { font-size: 1.65rem !important; line-height: 1.16 !important; }
     h2 { font-size: 1.18rem !important; }
     [data-testid="stHorizontalBlock"] { flex-wrap: wrap; gap: 0.65rem; }
@@ -574,3 +574,4 @@ with col2:
                     f"- {line}" for line in vocabulary_lines
                 )
             )
+
