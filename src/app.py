@@ -37,28 +37,86 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-.block-container { padding-top: 2rem; }
-h1 { color: #6C2BD9; }
-h2 { color: #6C2BD9; border-bottom: 2px solid #E9D8FD; padding-bottom: 8px; }
+.stApp { background: #F5F8FC; color: #17212B; }
+[data-testid="stHeader"] { background: rgba(245, 248, 252, 0.92); }
+.block-container {
+    max-width: 1280px;
+    padding: 1.4rem clamp(1rem, 3vw, 2.25rem) 3rem;
+}
+.hero-kicker {
+    margin: 0 0 0.2rem 0.15rem;
+    color: #0E8290;
+    font-size: 0.76rem;
+    font-weight: 750;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+h1 {
+    color: #17324D;
+    font-size: clamp(1.7rem, 4vw, 2.55rem) !important;
+    line-height: 1.15 !important;
+    letter-spacing: -0.025em;
+    margin-bottom: 0.25rem !important;
+}
+h2 {
+    color: #155E75;
+    border-bottom: 2px solid #D8E9EF;
+    padding-bottom: 0.55rem;
+    font-size: clamp(1.25rem, 2.2vw, 1.55rem) !important;
+    line-height: 1.25 !important;
+}
+[data-testid="stCaptionContainer"] { color: #526476; }
+[data-testid="stHorizontalBlock"] { gap: 1rem; }
+[data-testid="stFileUploaderDropzone"] { border-radius: 14px; }
 div[data-testid="stVerticalBlockBorderWrapper"] {
-    background-color: #FAFAFF;
-    border-radius: 14px;
-    padding: 8px;
+    background-color: #FFFFFF;
+    border: 1px solid #DCE7EE;
+    border-radius: 18px;
+    padding: 12px;
+    box-shadow: 0 8px 22px rgba(23, 50, 77, 0.06);
 }
 .stButton > button {
-    background: linear-gradient(90deg, #6C2BD9, #D6336C);
+    background: linear-gradient(100deg, #0E8290, #155E75);
     color: white;
     border: none;
-    border-radius: 10px;
-    padding: 0.6em 1.2em;
+    border-radius: 12px;
+    min-height: 48px;
+    padding: 0.65em 1.2em;
     font-weight: 600;
 }
-.stButton > button:hover { opacity: 0.9; color: white; }
+.stButton > button:hover { opacity: 0.92; color: white; border: none; }
+[data-testid="stRadio"] div[role="radiogroup"] { gap: 0.5rem; }
+img, video, canvas { max-width: 100%; }
+@media (max-width: 680px) {
+    .block-container { padding: 0.75rem 0.7rem 2rem; }
+    h1 { font-size: 1.65rem !important; line-height: 1.16 !important; }
+    h2 { font-size: 1.18rem !important; }
+    [data-testid="stHorizontalBlock"] { flex-wrap: wrap; gap: 0.65rem; }
+    [data-testid="column"] {
+        flex: 1 1 100% !important;
+        width: 100% !important;
+        min-width: 100% !important;
+    }
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        padding: 0.55rem;
+        border-radius: 15px;
+    }
+    [data-testid="stRadio"] div[role="radiogroup"] {
+        flex-wrap: wrap;
+        column-gap: 0.4rem;
+        row-gap: 0.2rem;
+    }
+    [data-testid="stRadio"] label { font-size: 0.9rem !important; }
+    .stButton > button { width: 100%; min-height: 48px; }
+    [data-testid="stSelectbox"] [role="combobox"],
+    [data-testid="stTextInput"] input { min-height: 44px; }
+}
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🤟 Pakistan Sign Language — Two-Way Communication")
-st.caption("Sign ↔ Text ↔ Voice, with a PSL vocabulary you can extend.")
+st.markdown('<div class="hero-kicker">Pakistan Sign Language</div>', unsafe_allow_html=True)
+st.title("Two-Way Communication")
+st.caption("Sign ↔ English text and voice · 68-word PSL vocabulary")
 
 
 def get_classes_in_model_order(label_map):
